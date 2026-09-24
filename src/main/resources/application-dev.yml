@@ -1,0 +1,5 @@
+# Profil "dev" : lancement local hors Docker (./scripts/run-dev.sh).
+# Lit les secrets du fichier .env à la racine (hors Git) ; les variables d'environnement restent prioritaires.
+spring:
+  config:
+    import: optional:file:.env[.properties]

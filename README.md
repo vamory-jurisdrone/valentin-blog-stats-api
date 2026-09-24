@@ -33,6 +33,29 @@ SPRING_PROFILES_ACTIVE=demo docker compose up --build
 
 Remise à zéro de la base : `docker compose down -v`.
 
+## Lancer sans Docker, avec MariaDB Homebrew (données conservées)
+
+Installation une seule fois (MariaDB sur le port **3307** : le 3306 est pris par XAMPP pour Symfony) :
+
+```bash
+brew install mariadb@11.4 openjdk@21
+# /opt/homebrew/etc/my.cnf.d/stats-api.cnf : [mysqld] port=3307, bind-address=127.0.0.1,
+#   character-set-server=utf8mb4, collation-server=utf8mb4_unicode_ci, default-time-zone=+00:00
+brew services start mariadb@11.4          # redémarre tout seul à l'ouverture de session
+mariadb -e "CREATE DATABASE stats CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            CREATE USER 'stats'@'127.0.0.1' IDENTIFIED BY '<mot de passe>';
+            GRANT ALL ON stats.* TO 'stats'@'127.0.0.1';"
+```
+
+Les secrets vont dans `.env` à la racine (hors Git, lu par le profil `dev`) : `DB_URL=jdbc:mariadb://127.0.0.1:3307/stats`,
+`DB_USER`, `DB_PASSWORD`, `STATS_CLIENT_ID`, `STATS_CLIENT_SECRET` (identique à `Symphony/.env.local`), `STATS_JWT_SECRET`
+(`openssl rand -hex 32` pour chaque secret). Puis :
+
+```bash
+./scripts/run-dev.sh          # API sur http://127.0.0.1:8080, Flyway migre la base au démarrage
+./scripts/run-dev.sh demo     # idem + données de démo si la base est vide
+```
+
 ## Lancer sans Docker (H2 en mémoire)
 
 ```bash
