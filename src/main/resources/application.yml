@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: stats-api
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://localhost:3307/stats}   # port publié par compose.yaml
+    username: ${DB_USER:stats}
+    password: ${DB_PASSWORD:stats}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none   # le schéma appartient à Flyway
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8080
+  forward-headers-strategy: native   # RemoteIpValve de Tomcat
+  tomcat:
+    remoteip:
+      # Seuls ces proxys (regex sur l'IP) peuvent fixer l'IP client via X-Forwarded-For.
+      # Défaut : boucle locale uniquement (Tomcat, lui, croit par défaut 10/8, 172.16/12, 192.168/16).
+      internal-proxies: '${STATS_TRUSTED_PROXIES:127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}'
+  error:
+    include-stacktrace: never
+    include-message: never
+
+stats:
+  auth:
+    # Clé HMAC (HS256) de signature des JWT, au moins 32 octets (sinon l'API refuse de démarrer).
+    # Valeur par défaut réservée au développement : openssl rand -base64 48
+    jwt-secret: ${STATS_JWT_SECRET:dev-only-jwt-secret-change-me-0123456789}
+    token-ttl-minutes: ${STATS_TOKEN_TTL_MINUTES:15}
+    # Applications autorisées à obtenir un jeton (POST /api/auth/token, grant client_credentials)
+    clients:
+      - id: ${STATS_CLIENT_ID:symfony-blog}
+        secret: ${STATS_CLIENT_SECRET:change-me}
+        scopes: ["stats:read", "articles:write"]
+  cors:
+    allowed-origins: ${STATS_CORS_ORIGINS:http://localhost:8000,http://127.0.0.1:8000,https://127.0.0.1:8000}
+  rate-limit:
+    events-per-minute: 60
+    token-requests-per-minute: 10
+  dedup-window-minutes: 30
+  retention-months: 13
+  cache-ttl-minutes: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    com.blog.stats: INFO

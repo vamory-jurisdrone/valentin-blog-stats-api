@@ -1,0 +1,59 @@
+# API de stats + sa base MariaDB. Lancement : docker compose up --build
+# Toutes les variables ont une valeur par défaut ; les surcharger dans un fichier .env (voir .env.example).
+name: blog-stats
+
+services:
+  stats-db:
+    image: mariadb:11.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+    environment:
+      MARIADB_DATABASE: stats
+      MARIADB_USER: ${DB_USER:-stats}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-stats}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    ports:
+      # Boucle locale uniquement : la base n'est pas joignable depuis le réseau.
+      # 3307 sur l'hôte : 3306 est souvent déjà pris par le MariaDB/MySQL local (XAMPP) de Symfony.
+      - "127.0.0.1:${DB_PORT:-3307}:3306"
+    volumes:
+      - stats-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  stats-api:
+    build: .
+    image: blog-stats-api:latest
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      DB_URL: jdbc:mariadb://stats-db:3306/stats
+      DB_USER: ${DB_USER:-stats}
+      DB_PASSWORD: ${DB_PASSWORD:-stats}
+      # Application cliente (Symfony) : identifiant et secret échangés contre un JWT sur POST /api/auth/token
+      STATS_CLIENT_ID: ${STATS_CLIENT_ID:-symfony-blog}
+      STATS_CLIENT_SECRET: ${STATS_CLIENT_SECRET:-change-me}
+      # Clé de signature HS256 des JWT (au moins 32 octets, sinon l'API refuse de démarrer)
+      STATS_JWT_SECRET: ${STATS_JWT_SECRET:-dev-only-jwt-secret-change-me-0123456789}
+      STATS_TOKEN_TTL_MINUTES: ${STATS_TOKEN_TTL_MINUTES:-15}
+      STATS_CORS_ORIGINS: ${STATS_CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000,https://127.0.0.1:8000}
+      STATS_RATELIMIT_EVENTSPERMINUTE: ${STATS_RATELIMIT_EVENTSPERMINUTE:-60}
+      STATS_RATELIMIT_TOKENREQUESTSPERMINUTE: ${STATS_RATELIMIT_TOKENREQUESTSPERMINUTE:-10}
+      # Regex des IP de proxy autorisées à fixer X-Forwarded-For (défaut : boucle locale seulement)
+      STATS_TRUSTED_PROXIES: ${STATS_TRUSTED_PROXIES:-127\.\d+\.\d+\.\d+|0:0:0:0:0:0:0:1|::1}
+      # "demo" charge un jeu de données de démonstration au démarrage
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+    depends_on:
+      stats-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  stats-db-data:
